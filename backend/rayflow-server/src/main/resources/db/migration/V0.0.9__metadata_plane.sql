@@ -70,7 +70,8 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint
-        WHERE conname = 'fk_metadata_collection_run_asset'
+        WHERE conrelid = 'rf_metadata_collection_run'::regclass
+          AND conname = 'fk_metadata_collection_run_asset'
     ) THEN
         ALTER TABLE rf_metadata_collection_run
             ADD CONSTRAINT fk_metadata_collection_run_asset
@@ -282,6 +283,7 @@ CREATE TABLE IF NOT EXISTS rf_metadata_event (
     tenant_id         BIGINT NOT NULL REFERENCES rf_tenant(id),
     event_id          VARCHAR(256) NOT NULL,
     version           INT NOT NULL DEFAULT 1,
+    CONSTRAINT ck_rf_metadata_event_version CHECK (version >= 1),
     event_type        VARCHAR(64) NOT NULL,
     source            VARCHAR(128) NOT NULL,
     occurred_at       TIMESTAMPTZ NOT NULL,
@@ -299,7 +301,7 @@ CREATE TABLE IF NOT EXISTS rf_metadata_event (
 CREATE TABLE IF NOT EXISTS rf_metadata_event_delivery (
     id             BIGSERIAL PRIMARY KEY,
     tenant_id      BIGINT NOT NULL REFERENCES rf_tenant(id),
-    event_id       BIGINT NOT NULL REFERENCES rf_metadata_event(id),
+    metadata_event_id BIGINT NOT NULL REFERENCES rf_metadata_event(id),
     consumer_name  VARCHAR(128) NOT NULL,
     status         VARCHAR(32) NOT NULL,
     attempt        INT NOT NULL DEFAULT 0,
@@ -313,7 +315,7 @@ CREATE TABLE IF NOT EXISTS rf_metadata_event_delivery (
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_tenant_key
     ON rf_asset (tenant_id, asset_key) WHERE deleted = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_context_version
-    ON rf_asset_context_version (tenant_id, asset_id, version_no);
+    ON rf_asset_context_version (tenant_id, asset_id, version_no) WHERE deleted = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_context_current
     ON rf_asset_context_version (tenant_id, asset_id) WHERE is_current = TRUE AND deleted = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_column_name
@@ -324,8 +326,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_lineage_current_edge
     ON rf_asset_lineage_edge (
         tenant_id, upstream_asset_id, downstream_asset_id, edge_type, source, COALESCE(source_event_id, '')
     ) WHERE status = 'ACTIVE' AND deleted = 0;
--- DAO upserts must target this partial expression index and use ON CONFLICT DO UPDATE
--- for latest-wins current-edge-set semantics; source_event_id remains replay provenance.
+-- DAO upserts must use ON CONFLICT (tenant_id, upstream_asset_id, downstream_asset_id,
+-- edge_type, source, (COALESCE(source_event_id, ''))) WHERE status = 'ACTIVE' AND deleted = 0
+-- DO UPDATE ... for latest-wins current-edge-set semantics; source_event_id remains replay provenance.
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_usage
     ON rf_asset_usage (tenant_id, asset_id, consumer_type, consumer_key, access_type, source) WHERE deleted = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_asset_owner
@@ -345,7 +348,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_metadata_collection_item
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_metadata_event
     ON rf_metadata_event (tenant_id, event_id, source) WHERE deleted = 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_rf_metadata_event_delivery
-    ON rf_metadata_event_delivery (tenant_id, event_id, consumer_name) WHERE deleted = 0;
+    ON rf_metadata_event_delivery (tenant_id, metadata_event_id, consumer_name) WHERE deleted = 0;
 
 CREATE INDEX IF NOT EXISTS idx_rf_asset_tenant_type_status
     ON rf_asset (tenant_id, asset_type, status, deleted);

@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 
 public final class AssetKeySpec {
 
+    /** Emitted keys lowercase the platform segment. */
     public static final String FORMAT = "tenant-{tenantId}:{platform}:{namespace}.{name}";
     public static final String TENANT_PREFIX = "tenant-";
     public static final String SEPARATOR = ":";
