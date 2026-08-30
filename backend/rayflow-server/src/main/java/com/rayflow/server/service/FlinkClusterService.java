@@ -270,7 +270,11 @@ public class FlinkClusterService extends ServiceImpl<FlinkClusterMapper, FlinkCl
     }
 
     private static boolean isSupportedFlinkVersion(String flinkVersion) {
-        return flinkVersion != null && flinkVersion.trim().startsWith("2.");
+        if (flinkVersion == null) {
+            return false;
+        }
+        String version = flinkVersion.trim();
+        return version.startsWith("2.") || version.startsWith("1.");
     }
 
     private static void normalizeRuntimeFields(FlinkCluster cluster) {
